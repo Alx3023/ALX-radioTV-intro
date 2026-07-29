@@ -2620,15 +2620,15 @@ function toggleAudio() {
 function togglePiP() {
   const v=document.getElementById('videoPlayer');
   if(!v.src&&!App.hls){showToast('❌ Avvia un canale',true);return;}
-  if(document.pictureInPictureElement)document.exitPictureInPicture();
-  else if(document.pictureInPictureEnabled)v.requestPictureInPicture().then(()=>showToast('🖼 PiP on')).catch(()=>showToast('❌ PiP non disponibile',true));
-  else showToast('❌ PiP non supportato',true);
+  if(!document.pictureInPictureEnabled){showToast('❌ PiP non supportato su questo dispositivo',true);return;}
+  if(document.pictureInPictureElement){document.exitPictureInPicture().catch(()=>showToast('❌ Errore uscita PiP',true));}else{v.requestPictureInPicture().then(()=>showToast('🖼 PiP on')).catch(err=>{console.error('PiP error:',err);if(err.name==='NotAllowedError'){showToast('▶ Avvia il video prima di PiP','warning');}else if(err.name==='NotSupportedError'){showToast('❌ PiP non supportato per questo formato',true);}else{showToast('❌ PiP non disponibile',true);}});}
 }
 
 function takeScreenshot() {
   const v=document.getElementById('videoPlayer');
   if(!v.src&&!App.hls){showToast('❌ Avvia un canale',true);return;}
-  try{const c=document.createElement('canvas');c.width=v.videoWidth||1280;c.height=v.videoHeight||720;c.getContext('2d').drawImage(v,0,0,c.width,c.height);const d=c.toDataURL('image/png');document.getElementById('videoFlash').classList.add('flash');setTimeout(()=>document.getElementById('videoFlash').classList.remove('flash'),200);const p=document.createElement('img');p.src=d;p.className='screenshot-preview';p.onclick=()=>{const a=document.createElement('a');a.href=d;a.download='SANDRO_'+Date.now()+'.png';document.body.appendChild(a);a.click();a.remove();p.remove();showToast('✅ Scaricato');};setTimeout(()=>{if(p.parentNode)p.remove();},5000);document.body.appendChild(p);showToast('📸 Screenshot');if(navigator.vibrate)navigator.vibrate(30);}catch(e){showToast('❌ Errore',true);}
+  if(v.readyState<2||v.videoWidth===0||v.videoHeight===0){showToast('⏳ Attendi che il video carichi completamente',true);return;}
+  try{const c=document.createElement('canvas');c.width=v.videoWidth||1280;c.height=v.videoHeight||720;const ctx=c.getContext('2d');ctx.drawImage(v,0,0,c.width,c.height);const d=c.toDataURL('image/png');document.getElementById('videoFlash').classList.add('flash');setTimeout(()=>document.getElementById('videoFlash').classList.remove('flash'),200);const p=document.createElement('img');p.src=d;p.className='screenshot-preview';p.onclick=()=>{const a=document.createElement('a');a.href=d;a.download='SANDRO_'+Date.now()+'.png';document.body.appendChild(a);a.click();a.remove();p.remove();showToast('✅ Scaricato');};setTimeout(()=>{if(p.parentNode)p.remove();},5000);document.body.appendChild(p);showToast('📸 Screenshot');if(navigator.vibrate)navigator.vibrate(30);}catch(err){console.error('Screenshot error:',err);if(err.name==='SecurityError'){showToast('❌ Screenshot bloccato: stream protetto (CORS)',true);}else{showToast('❌ Errore screenshot',true);}}
 }
 
 // ============================================================
@@ -2638,7 +2638,10 @@ function toggleRecording() { if(App.isRecording)stopRecording();else startRecord
 function startRecording() {
   const v=document.getElementById('videoPlayer');
   if(!v.src&&!App.hls){showToast('❌ Avvia un canale',true);return;}
-  try{const s=v.captureStream?v.captureStream():v.mozCaptureStream();if(!s){showToast('❌ Non supportato',true);return;}App.recordedChunks=[];let m='video/webm;codecs=vp9,opus';if(!MediaRecorder.isTypeSupported(m))m='video/webm;codecs=vp8,opus';if(!MediaRecorder.isTypeSupported(m))m='video/webm';App.mediaRecorder=new MediaRecorder(s,{mimeType:m,videoBitsPerSecond:5000000});App.mediaRecorder.ondataavailable=e=>{if(e.data.size>0)App.recordedChunks.push(e.data);};App.mediaRecorder.onstop=saveRecording;App.mediaRecorder.start(1000);App.isRecording=true;App.recordingStartTime=Date.now();document.getElementById('recBadge').classList.add('active');document.getElementById('btnRecord').classList.add('recording');App.recordingInterval=setInterval(updateRecTimer,1000);showToast('🔴 REC');}catch(e){showToast('❌ Errore',true);}
+  const canCapture=(typeof v.captureStream==='function')||(typeof v.mozCaptureStream==='function');
+  if(!canCapture){showToast('❌ Registrazione non supportata su iOS/Safari',true);return;}
+  if(typeof MediaRecorder==='undefined'){showToast('❌ MediaRecorder non supportato',true);return;}
+  try{const s=v.captureStream?v.captureStream():v.mozCaptureStream();if(!s){showToast('❌ Non supportato',true);return;}App.recordedChunks=[];let m='video/webm;codecs=vp9,opus';if(!MediaRecorder.isTypeSupported(m))m='video/webm;codecs=vp8,opus';if(!MediaRecorder.isTypeSupported(m))m='video/webm';App.mediaRecorder=new MediaRecorder(s,{mimeType:m,videoBitsPerSecond:5000000});App.mediaRecorder.ondataavailable=e=>{if(e.data.size>0)App.recordedChunks.push(e.data);};App.mediaRecorder.onstop=saveRecording;App.mediaRecorder.start(1000);App.isRecording=true;App.recordingStartTime=Date.now();document.getElementById('recBadge').classList.add('active');document.getElementById('btnRecord').classList.add('recording');App.recordingInterval=setInterval(updateRecTimer,1000);showToast('🔴 REC');}catch(e){console.error('REC error:',e);showToast('❌ Errore avvio registrazione',true);}
 }
 function stopRecording() {
   if(App.mediaRecorder&&App.mediaRecorder.state!=='inactive'){App.mediaRecorder.stop();App.isRecording=false;clearInterval(App.recordingInterval);document.getElementById('recBadge').classList.remove('active');document.getElementById('btnRecord').classList.remove('recording');showToast('⏹ Stop');}
